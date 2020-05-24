@@ -57,11 +57,10 @@ delete_old_log() {
 
 print_affected_files() {
     printf 'The following files will be processed:\n'
-    shopt -s nullglob
     for f in *"$SEP"*; do
+        [[ -f "$f" ]] || continue
         printf '%s\n' "$f"
     done
-    shopt -u nullglob
     printf '\n'
 }
 
@@ -77,7 +76,7 @@ create_target_directory() {
     local dir=$1
     mkdir -p "$dir"
     if [[ ! -d "$dir" ]]; then
-        printf "The target directory '%s' could not be created. Skipping to next file" "$dir"
+        log "$(printf "The target directory '%s' could not be created. Skipping to next file" "$dir")"
         dir=''
     fi
     echo "$dir"
@@ -86,14 +85,28 @@ create_target_directory() {
 move_file() {
     local file=$1
     local dir=$2
-    local MV_ERROR=$(mv -i "$file" "$dir" 2>&1 /dev/null)
+
+    printf "MOVE FILE '%s'  TO FOLDER '%s'\n" "$f" "$dir"
+    [[ $DRY_RUN = true ]] \
+        && return
+    [[ $(create_target_directory "$dir") ]] \
+        || return
+    local MV_ERROR
+    MV_ERROR=$( mv -i "$file" "$dir" 2>&1 )
     if [[ ! $MV_ERROR ]]; then
         printf "Move successful\n"
     else
-        printf "Error. File was not moved\n"
         ERROR_OCURRED=true
-        printf "could not move '%s' : %s\n" "$f" "$MV_ERROR" >> "$LOG_FILE"
+        log "$(printf "Could not move '%s' : %s\n" "$f" "$MV_ERROR")"
     fi
+}
+
+log() {
+    local log_message=$1
+
+    printf '%s\n' "$log_message"
+    printf '%s %s\n' "$(date '+%Y/%m/%d %H:%M:%S')" "$log_message" \
+        >> "$LOG_FILE"
 }
 
 print_error_notice() {
@@ -116,12 +129,6 @@ main() {
         [[ -f "$f" ]] \
             || continue # skip if not regular file
         dir=$(directory_name_from_filename "$f")
-        printf "MOVE '%s'  TO '%s'\n" "$f" "$dir"
-        [[ $DRY_RUN = true ]] \
-            && continue
-        delete_old_log
-        [[ $(create_target_directory "$dir") ]] \
-            || continue
         move_file "$f" "$dir"
         printf '\n'
     done
